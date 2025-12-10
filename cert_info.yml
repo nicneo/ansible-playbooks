@@ -1,0 +1,55 @@
+---
+- name: SSL Certificate Information
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    cert_paths:
+      - /etc/pki/tls/certs
+      - /etc/ssl/certs
+    check_remote_hosts: []
+    # Example:
+    # check_remote_hosts:
+    #   - hostname: google.com
+    #     port: 443
+    
+  tasks:
+    - name: Find certificate files
+      ansible.builtin.find:
+        paths: "{{ cert_paths }}"
+        patterns: "*.crt,*.pem"
+        recurse: no
+      register: cert_files
+      failed_when: false
+
+    - name: Check local certificate expiry
+      ansible.builtin.shell: |
+        for cert in $(find {{ cert_paths | join(" ") }} -name "*.crt" -o -name "*.pem" 2>/dev/null | head -10); do
+          if openssl x509 -in "$cert" -noout 2>/dev/null; then
+            expiry=$(openssl x509 -in "$cert" -noout -enddate 2>/dev/null | cut -d= -f2)
+            echo "$cert: $expiry"
+          fi
+        done
+      register: local_certs
+      changed_when: false
+      failed_when: false
+
+    - name: Display local certificates
+      ansible.builtin.debug:
+        msg: "{{ local_certs.stdout_lines }}"
+      when: local_certs.stdout_lines | length > 0
+
+    - name: Check remote certificate expiry
+      ansible.builtin.shell: |
+        echo | openssl s_client -servername {{ item.hostname }} -connect {{ item.hostname }}:{{ item.port | default(443) }} 2>/dev/null | openssl x509 -noout -dates
+      register: remote_certs
+      loop: "{{ check_remote_hosts }}"
+      when: check_remote_hosts | length > 0
+      changed_when: false
+      failed_when: false
+
+    - name: Display remote certificate info
+      ansible.builtin.debug:
+        msg: "{{ item.item.hostname }}: {{ item.stdout }}"
+      loop: "{{ remote_certs.results | default([]) }}"
+      when: check_remote_hosts | length > 0

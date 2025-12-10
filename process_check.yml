@@ -1,0 +1,50 @@
+---
+- name: Process Check and Management
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    process_names: []
+    action: check  # check, kill
+    # Example:
+    # process_names:
+    #   - nginx
+    #   - httpd
+    
+  tasks:
+    - name: Check if processes are running
+      ansible.builtin.shell: pgrep -x "{{ item }}" > /dev/null && echo "RUNNING" || echo "NOT RUNNING"
+      register: process_status
+      loop: "{{ process_names }}"
+      changed_when: false
+      when:
+        - action == "check"
+        - process_names | length > 0
+
+    - name: Display process status
+      ansible.builtin.debug:
+        msg: "{{ item.item }}: {{ item.stdout }}"
+      loop: "{{ process_status.results | default([]) }}"
+      when: action == "check"
+
+    - name: Get top processes by CPU
+      ansible.builtin.shell: ps aux --sort=-%cpu | head -11
+      register: top_cpu
+      changed_when: false
+      when: process_names | length == 0
+
+    - name: Display top CPU processes
+      ansible.builtin.debug:
+        msg: "{{ top_cpu.stdout_lines }}"
+      when: process_names | length == 0
+
+    - name: Get top processes by memory
+      ansible.builtin.shell: ps aux --sort=-%mem | head -11
+      register: top_mem
+      changed_when: false
+      when: process_names | length == 0
+
+    - name: Display top memory processes
+      ansible.builtin.debug:
+        msg: "{{ top_mem.stdout_lines }}"
+      when: process_names | length == 0

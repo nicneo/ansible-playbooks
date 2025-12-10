@@ -1,0 +1,60 @@
+---
+- name: User Management
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    users_to_create: []
+    users_to_remove: []
+    # Example:
+    # users_to_create:
+    #   - name: johndoe
+    #     groups: ["wheel", "docker"]
+    #     shell: /bin/bash
+    #     ssh_key: "ssh-rsa AAAA..."
+    # users_to_remove:
+    #   - olduser
+
+  tasks:
+    - name: Create user accounts
+      ansible.builtin.user:
+        name: "{{ item.name }}"
+        groups: "{{ item.groups | default([]) }}"
+        shell: "{{ item.shell | default(/bin/bash) }}"
+        create_home: yes
+        state: present
+      loop: "{{ users_to_create }}"
+      when: users_to_create | length > 0
+
+    - name: Set authorized SSH keys
+      ansible.posix.authorized_key:
+        user: "{{ item.name }}"
+        key: "{{ item.ssh_key }}"
+        state: present
+      loop: "{{ users_to_create }}"
+      when:
+        - users_to_create | length > 0
+        - item.ssh_key is defined
+
+    - name: Remove user accounts
+      ansible.builtin.user:
+        name: "{{ item }}"
+        state: absent
+        remove: yes
+      loop: "{{ users_to_remove }}"
+      when: users_to_remove | length > 0
+
+    - name: Ensure sudo group exists
+      ansible.builtin.group:
+        name: wheel
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Configure passwordless sudo for wheel group
+      ansible.builtin.lineinfile:
+        path: /etc/sudoers.d/wheel-nopasswd
+        line: "%wheel ALL=(ALL) NOPASSWD: ALL"
+        create: yes
+        mode: "0440"
+        validate: "visudo -cf %s"
+      when: ansible_os_family == "RedHat"

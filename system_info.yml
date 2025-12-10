@@ -1,0 +1,60 @@
+---
+- name: System Information Gathering
+  hosts: all
+  become: true
+  gather_facts: true
+  
+  tasks:
+    - name: Gather system information
+      ansible.builtin.debug:
+        msg: |
+          ============================================
+          SYSTEM INFORMATION FOR {{ inventory_hostname }}
+          ============================================
+          Hostname: {{ ansible_hostname }}
+          FQDN: {{ ansible_fqdn }}
+          OS: {{ ansible_distribution }} {{ ansible_distribution_version }}
+          Kernel: {{ ansible_kernel }}
+          Architecture: {{ ansible_architecture }}
+          
+          CPU: {{ ansible_processor[2] | default("Unknown") }}
+          CPU Cores: {{ ansible_processor_cores }}
+          CPU Count: {{ ansible_processor_count }}
+          
+          Total Memory: {{ (ansible_memtotal_mb / 1024) | round(2) }} GB
+          Free Memory: {{ (ansible_memfree_mb / 1024) | round(2) }} GB
+          
+          IPv4 Address: {{ ansible_default_ipv4.address | default("N/A") }}
+          MAC Address: {{ ansible_default_ipv4.macaddress | default("N/A") }}
+          Gateway: {{ ansible_default_ipv4.gateway | default("N/A") }}
+          
+          Virtualization: {{ ansible_virtualization_type | default("None") }}
+          Uptime: {{ ansible_uptime_seconds // 86400 }} days
+
+    - name: Get disk usage
+      ansible.builtin.shell: df -h --output=source,size,used,avail,pcent,target | grep -E "^/dev"
+      register: disk_usage
+      changed_when: false
+
+    - name: Display disk usage
+      ansible.builtin.debug:
+        msg: "{{ disk_usage.stdout_lines }}"
+
+    - name: Get running services count
+      ansible.builtin.shell: systemctl list-units --type=service --state=running --no-pager | grep -c "running"
+      register: running_services
+      changed_when: false
+      failed_when: false
+
+    - name: Display running services count
+      ansible.builtin.debug:
+        msg: "Running services: {{ running_services.stdout }}"
+
+    - name: Get load average
+      ansible.builtin.shell: cat /proc/loadavg | cut -d" " -f1-3
+      register: load_avg
+      changed_when: false
+
+    - name: Display load average
+      ansible.builtin.debug:
+        msg: "Load average (1/5/15 min): {{ load_avg.stdout }}"

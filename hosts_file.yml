@@ -1,0 +1,19 @@
+---
+- name: Hosts File Management
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    hosts_entries: []
+    # Example:
+    # hosts_entries:
+    #   - ip: 10.1.1.100
+    #     hostnames:
+    #       - server1
+    #       - server1.example.com
+    
+  tasks:
+    - name: Add hosts entries
+      ansible.builtin.lineinfile:
+        path: /etc/hosts
+        line: "{{ item.ip }}    {{ item.hostnames | join(

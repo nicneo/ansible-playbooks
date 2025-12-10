@@ -1,0 +1,33 @@
+---
+- name: File Deployment
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    files_to_deploy: []
+    # Example:
+    # files_to_deploy:
+    #   - content: "Hello World"
+    #     dest: /tmp/hello.txt
+    #     owner: root
+    #     group: root
+    #     mode: "0644"
+    
+  tasks:
+    - name: Deploy files with content
+      ansible.builtin.copy:
+        content: "{{ item.content }}"
+        dest: "{{ item.dest }}"
+        owner: "{{ item.owner | default(root) }}"
+        group: "{{ item.group | default(root) }}"
+        mode: "{{ item.mode | default(0644) }}"
+        backup: yes
+      loop: "{{ files_to_deploy }}"
+      when:
+        - files_to_deploy | length > 0
+        - item.content is defined
+
+    - name: Display deployed files
+      ansible.builtin.debug:
+        msg: "Deployed {{ files_to_deploy | length }} file(s)"
+      when: files_to_deploy | length > 0

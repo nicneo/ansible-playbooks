@@ -1,0 +1,31 @@
+---
+- name: System Reboot
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    reboot_timeout: 600
+    pre_reboot_delay: 5
+    post_reboot_delay: 30
+    reboot_message: "System reboot initiated by Ansible"
+    
+  tasks:
+    - name: Display reboot warning
+      ansible.builtin.debug:
+        msg: "WARNING: System will reboot in {{ pre_reboot_delay }} seconds"
+
+    - name: Reboot the system
+      ansible.builtin.reboot:
+        reboot_timeout: "{{ reboot_timeout }}"
+        pre_reboot_delay: "{{ pre_reboot_delay }}"
+        post_reboot_delay: "{{ post_reboot_delay }}"
+        msg: "{{ reboot_message }}"
+
+    - name: Verify system is up
+      ansible.builtin.command: uptime
+      register: uptime_result
+      changed_when: false
+
+    - name: Display uptime after reboot
+      ansible.builtin.debug:
+        msg: "System rebooted successfully. {{ uptime_result.stdout }}"

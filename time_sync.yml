@@ -1,0 +1,62 @@
+---
+- name: Time Synchronization Configuration
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    timezone: "UTC"
+    ntp_servers:
+      - 0.pool.ntp.org
+      - 1.pool.ntp.org
+      - 2.pool.ntp.org
+      - 3.pool.ntp.org
+    
+  tasks:
+    - name: Set timezone
+      community.general.timezone:
+        name: "{{ timezone }}"
+
+    - name: Install chrony (RHEL)
+      ansible.builtin.dnf:
+        name: chrony
+        state: present
+      when: ansible_os_family == "RedHat"
+
+    - name: Install chrony (Debian)
+      ansible.builtin.apt:
+        name: chrony
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Configure chrony NTP servers
+      ansible.builtin.template:
+        dest: /etc/chrony.conf
+        content: |
+          # Chrony configuration managed by Ansible
+          {% for server in ntp_servers %}
+          server {{ server }} iburst
+          {% endfor %}
+          
+          driftfile /var/lib/chrony/drift
+          makestep 1.0 3
+          rtcsync
+          keyfile /etc/chrony.keys
+          leapsectz right/UTC
+          logdir /var/log/chrony
+        mode: "0644"
+      notify: Restart chrony
+
+    - name: Ensure chrony is running
+      ansible.builtin.service:
+        name: chronyd
+        state: started
+        enabled: yes
+
+    - name: Force time sync
+      ansible.builtin.command: chronyc makestep
+      changed_when: false
+
+    - name: Get current time info
+      ansible.builtin.shell: |
+        echo "Current time: $(date)"
+        echo "Timezone: $(timedatectl | grep Time

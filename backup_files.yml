@@ -1,0 +1,60 @@
+---
+- name: Backup Files and Directories
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    backup_paths:
+      - /etc
+    backup_dest: /var/backups/ansible
+    backup_retention_days: 30
+    backup_compression: gz  # gz, bz2, xz
+    
+  tasks:
+    - name: Ensure backup destination exists
+      ansible.builtin.file:
+        path: "{{ backup_dest }}"
+        state: directory
+        mode: "0750"
+
+    - name: Create timestamp variable
+      ansible.builtin.set_fact:
+        backup_timestamp: "{{ ansible_date_time.iso8601_basic_short }}"
+
+    - name: Create backup archives
+      ansible.builtin.archive:
+        path: "{{ item }}"
+        dest: "{{ backup_dest }}/{{ item | basename }}_{{ backup_timestamp }}.tar.{{ backup_compression }}"
+        format: "{{ backup_compression }}"
+      loop: "{{ backup_paths }}"
+      register: backup_results
+
+    - name: Display backup results
+      ansible.builtin.debug:
+        msg: "Backed up {{ item.item }} -> {{ item.dest }} ({{ (item.dest_size | default(0) / 1024 / 1024) | round(2) }} MB)"
+      loop: "{{ backup_results.results }}"
+      when: backup_results.results is defined
+
+    - name: Remove old backups
+      ansible.builtin.find:
+        paths: "{{ backup_dest }}"
+        age: "{{ backup_retention_days }}d"
+        recurse: no
+      register: old_backups
+
+    - name: Delete old backup files
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ old_backups.files }}"
+      when: old_backups.files | length > 0
+
+    - name: List current backups
+      ansible.builtin.find:
+        paths: "{{ backup_dest }}"
+        patterns: "*.tar.*"
+      register: current_backups
+
+    - name: Display backup inventory
+      ansible.builtin.debug:
+        msg: "Current backups: {{ current_backups.files | map(attribute=path) | map(basename) | list }}"

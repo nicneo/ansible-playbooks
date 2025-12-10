@@ -1,0 +1,60 @@
+---
+- name: SSH Key Distribution
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    ssh_user: root
+    ssh_public_keys: []
+    ssh_keys_exclusive: false
+    # Example:
+    # ssh_public_keys:
+    #   - "ssh-rsa AAAA... user@host"
+    #   - "ssh-ed25519 AAAA... admin@server"
+    
+  tasks:
+    - name: Ensure .ssh directory exists
+      ansible.builtin.file:
+        path: "/home/{{ ssh_user }}/.ssh"
+        state: directory
+        owner: "{{ ssh_user }}"
+        group: "{{ ssh_user }}"
+        mode: "0700"
+      when: ssh_user != "root"
+
+    - name: Ensure .ssh directory exists (root)
+      ansible.builtin.file:
+        path: "/root/.ssh"
+        state: directory
+        owner: root
+        group: root
+        mode: "0700"
+      when: ssh_user == "root"
+
+    - name: Deploy SSH public keys
+      ansible.posix.authorized_key:
+        user: "{{ ssh_user }}"
+        key: "{{ item }}"
+        state: present
+        exclusive: "{{ ssh_keys_exclusive }}"
+      loop: "{{ ssh_public_keys }}"
+      when: ssh_public_keys | length > 0
+
+    - name: Display deployed keys count
+      ansible.builtin.debug:
+        msg: "Deployed {{ ssh_public_keys | length }} SSH key(s) for user {{ ssh_user }}"
+      when: ssh_public_keys | length > 0
+
+    - name: Verify authorized_keys file
+      ansible.builtin.shell: |
+        if [ "{{ ssh_user }}" = "root" ]; then
+          wc -l /root/.ssh/authorized_keys 2>/dev/null | awk "{print \$1}"
+        else
+          wc -l /home/{{ ssh_user }}/.ssh/authorized_keys 2>/dev/null | awk "{print \$1}"
+        fi
+      register: key_count
+      changed_when: false
+
+    - name: Display authorized keys count
+      ansible.builtin.debug:
+        msg: "Total authorized keys for {{ ssh_user }}: {{ key_count.stdout }}"

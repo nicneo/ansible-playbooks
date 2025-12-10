@@ -1,0 +1,25 @@
+---
+- name: Run Custom Command
+  hosts: all
+  become: true
+  gather_facts: false
+  vars:
+    command_to_run: "uptime"
+    command_shell: false  # use shell module instead of command
+    
+  tasks:
+    - name: Run command
+      ansible.builtin.command: "{{ command_to_run }}"
+      register: command_result
+      changed_when: false
+      when: not command_shell | bool
+
+    - name: Run shell command
+      ansible.builtin.shell: "{{ command_to_run }}"
+      register: shell_result
+      changed_when: false
+      when: command_shell | bool
+
+    - name: Display command output
+      ansible.builtin.debug:
+        msg: "{{ (command_result.stdout_lines | default([])) + (shell_result.stdout_lines | default([])) }}"

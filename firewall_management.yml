@@ -1,0 +1,102 @@
+---
+- name: Firewall Management
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    firewall_ports_tcp: []
+    firewall_ports_udp: []
+    firewall_services: []
+    firewall_action: "add"  # add, remove
+    # Example:
+    # firewall_ports_tcp: [80, 443, 8080]
+    # firewall_services: ["http", "https", "ssh"]
+    
+  tasks:
+    # firewalld (RHEL/CentOS/Fedora)
+    - name: Ensure firewalld is running (RHEL)
+      ansible.builtin.service:
+        name: firewalld
+        state: started
+        enabled: yes
+      when: ansible_os_family == "RedHat"
+
+    - name: Add TCP ports (firewalld)
+      ansible.posix.firewalld:
+        port: "{{ item }}/tcp"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop: "{{ firewall_ports_tcp }}"
+      when:
+        - ansible_os_family == "RedHat"
+        - firewall_action == "add"
+        - firewall_ports_tcp | length > 0
+
+    - name: Add UDP ports (firewalld)
+      ansible.posix.firewalld:
+        port: "{{ item }}/udp"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop: "{{ firewall_ports_udp }}"
+      when:
+        - ansible_os_family == "RedHat"
+        - firewall_action == "add"
+        - firewall_ports_udp | length > 0
+
+    - name: Add services (firewalld)
+      ansible.posix.firewalld:
+        service: "{{ item }}"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop: "{{ firewall_services }}"
+      when:
+        - ansible_os_family == "RedHat"
+        - firewall_action == "add"
+        - firewall_services | length > 0
+
+    - name: Remove TCP ports (firewalld)
+      ansible.posix.firewalld:
+        port: "{{ item }}/tcp"
+        permanent: yes
+        state: disabled
+        immediate: yes
+      loop: "{{ firewall_ports_tcp }}"
+      when:
+        - ansible_os_family == "RedHat"
+        - firewall_action == "remove"
+        - firewall_ports_tcp | length > 0
+
+    # UFW (Ubuntu/Debian)
+    - name: Ensure UFW is installed (Debian)
+      ansible.builtin.apt:
+        name: ufw
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Allow TCP ports (UFW)
+      community.general.ufw:
+        rule: allow
+        port: "{{ item }}"
+        proto: tcp
+      loop: "{{ firewall_ports_tcp }}"
+      when:
+        - ansible_os_family == "Debian"
+        - firewall_action == "add"
+        - firewall_ports_tcp | length > 0
+
+    - name: Display firewall status
+      ansible.builtin.shell: |
+        if command -v firewall-cmd &> /dev/null; then
+          firewall-cmd --list-all
+        elif command -v ufw &> /dev/null; then
+          ufw status verbose
+        fi
+      register: firewall_status
+      changed_when: false
+
+    - name: Show firewall status
+      ansible.builtin.debug:
+        msg: "{{ firewall_status.stdout_lines }}"

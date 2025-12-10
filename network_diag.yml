@@ -1,0 +1,73 @@
+---
+- name: Network Diagnostics
+  hosts: all
+  become: true
+  gather_facts: true
+  vars:
+    ping_hosts: []
+    check_ports: []
+    # Example:
+    # ping_hosts:
+    #   - 8.8.8.8
+    #   - google.com
+    # check_ports:
+    #   - host: 10.1.1.1
+    #     port: 22
+    
+  tasks:
+    - name: Display network interfaces
+      ansible.builtin.debug:
+        msg: |
+          Interface: {{ ansible_default_ipv4.interface }}
+          IP Address: {{ ansible_default_ipv4.address }}
+          Netmask: {{ ansible_default_ipv4.netmask }}
+          Gateway: {{ ansible_default_ipv4.gateway }}
+          MAC: {{ ansible_default_ipv4.macaddress }}
+
+    - name: Get all IP addresses
+      ansible.builtin.shell: ip -4 addr show | grep -oP "(?<=inet )[\d.]+"
+      register: all_ips
+      changed_when: false
+
+    - name: Display all IP addresses
+      ansible.builtin.debug:
+        msg: "IP Addresses: {{ all_ips.stdout_lines }}"
+
+    - name: Ping test hosts
+      ansible.builtin.shell: ping -c 3 -W 2 {{ item }} > /dev/null 2>&1 && echo "OK" || echo "FAILED"
+      register: ping_results
+      loop: "{{ ping_hosts }}"
+      changed_when: false
+      when: ping_hosts | length > 0
+
+    - name: Display ping results
+      ansible.builtin.debug:
+        msg: "{{ item.item }}: {{ item.stdout }}"
+      loop: "{{ ping_results.results | default([]) }}"
+      when: ping_hosts | length > 0
+
+    - name: Check port connectivity
+      ansible.builtin.wait_for:
+        host: "{{ item.host }}"
+        port: "{{ item.port }}"
+        timeout: 5
+        state: started
+      register: port_results
+      loop: "{{ check_ports }}"
+      when: check_ports | length > 0
+      failed_when: false
+
+    - name: Display port check results
+      ansible.builtin.debug:
+        msg: "{{ item.item.host }}:{{ item.item.port }} - {{ OPEN if item.state is defined and item.state == started else CLOSED/TIMEOUT }}"
+      loop: "{{ port_results.results | default([]) }}"
+      when: check_ports | length > 0
+
+    - name: Get listening ports
+      ansible.builtin.shell: ss -tlnp | grep LISTEN
+      register: listening_ports
+      changed_when: false
+
+    - name: Display listening ports
+      ansible.builtin.debug:
+        msg: "{{ listening_ports.stdout_lines }}"
